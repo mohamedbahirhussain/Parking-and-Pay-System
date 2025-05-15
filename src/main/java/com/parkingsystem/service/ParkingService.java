@@ -1,5 +1,6 @@
 package com.parkingsystem.service;
 
+import com.parkingsystem.exception.VehicleExitException;
 import com.parkingsystem.model.ParkingRecord;
 import com.parkingsystem.repository.ParkingRecordRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,39 +28,34 @@ public class ParkingService {
         return repository.save(record);
     }
 
-    // Vehicle Exit (Calculate Duration, Fee, and Set Payment Status)
+    // Vehicle Exit
     public ParkingRecord vehicleExit(String numberPlate) {
         ParkingRecord record = repository.findByNumberPlate(numberPlate)
                 .orElseThrow(() -> new RuntimeException("Vehicle not found"));
 
-        if (!record.getPaymentStatus().equals("Paid")) {
-            record.setOutTime(LocalDateTime.now());
-            Duration duration = Duration.between(record.getInTime(), record.getOutTime());
-            record.setTotalDuration(duration);
-            double hours = Math.ceil((double) duration.toMinutes() / 60);
-            record.setTotalAmount(hours * RATE_PER_HOUR);
+        if (!"Paid".equals(record.getPaymentStatus())) {
+            throw new VehicleExitException("Payment not completed. Vehicle cannot exit.");
+        }
 
-            // If the user has not paid, the status will remain "Not Paid"
+        if (record.getOutTime() == null) {
+            record.setOutTime(LocalDateTime.now());
             return repository.save(record);
         }
 
-        return record; // Already paid, no update
+        return record; // Already exited
     }
-
     // Mark as Paid
     public ParkingRecord markAsPaid(String numberPlate) {
         ParkingRecord record = repository.findByNumberPlate(numberPlate)
                 .orElseThrow(() -> new RuntimeException("Vehicle not found"));
 
         if (!record.getPaymentStatus().equals("Paid")) {
-            if (record.getOutTime() == null) {
-                record.setOutTime(LocalDateTime.now());
-            }
-            Duration duration = Duration.between(record.getInTime(), record.getOutTime());
+            // Don't set outTime here, just calculate duration till now
+            Duration duration = Duration.between(record.getInTime(), LocalDateTime.now());
             record.setTotalDuration(duration);
             double hours = Math.ceil((double) duration.toMinutes() / 60);
             record.setTotalAmount(hours * RATE_PER_HOUR);
-            record.setPaymentStatus("Paid");  // Set to "Paid" when payment is made
+            record.setPaymentStatus("Paid");
             return repository.save(record);
         }
 
